@@ -1,7 +1,9 @@
 The post-training quantization code without any existing quantization tools
 
 
+
 # Short Result
+
 ResNet-50 for cifar10
 - Based on google's paper [Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference](https://arxiv.org/abs/1712.05877)
 - This is Post-training Static Quantization, the model is trained in fp32, quantized value still in fp32 format but min max values changed accordingly
@@ -22,10 +24,14 @@ ResNet-50 for cifar10
 | 4bit fake-hist |  88.55%  |
 | 3bit fake-hist |  50.76%  |
 
+
+
 ## Project Structure and Re-produce
+
 I am using google colab pro (2 core 4 thread Intel Xeon CPU, 12g ram or high-ram mode with 24g ram)
 Change function get_CIFAR10(getdata=True) to download cifar-10 dataset
 
+```
 ├── checkpoint
 │   └── ResNet50_93.62_44.pt - Pre-trained ResNet50 cifar on GPU
 ├── data - the folder of data
@@ -34,9 +40,12 @@ Change function get_CIFAR10(getdata=True) to download cifar-10 dataset
 ├── My_ResNet_Quantization.py - Hand-write quantization (python script version)
 ├── PyTorch Quantization.xmind - PyTorch quantization source code structure
 └── README.md
+```
 
 
-# Backgound
+
+
+# Background
 [Quantization Resource Collection](https://jackwish.net/2019/neural-network-quantization-resources.html)
 [Introduction to the quantification method of neural network model (Chinese)](https://chenrudan.github.io/blog/2018/10/02/networkquantization.html)
 
@@ -49,7 +58,7 @@ Two principal ways to do quantization:
   - Static: CNN
 - Quantization-aware training
 
-## Int8 vs Float32
+## Int 8 vs Float 32
 Check this link: [How to accelerate and compress neural networks with quantization](https://towardsdatascience.com/how-to-accelerate-and-compress-neural-networks-with-quantization-edfbbabb6af7)
 
 |                  | Int 8       | uint8    | Float 32                                 |
@@ -57,7 +66,10 @@ Check this link: [How to accelerate and compress neural networks with quantizati
 | Range            | [−128, 127] | [0, 255] | [(2 − 2^23) × 2^127, (2^23 − 2) × 2^127] |
 | number of values | 2^8         | 2^8      | 2^32                                     |
 
+
+
 ## PyTorch Built-in Quantization Steps
+
 - Train a model in floating point using GPU
 - Prepare Quantization Model
   - Apply layer fusion (conv, bn, relu) in CPU eval mode
@@ -70,7 +82,9 @@ Check this link: [How to accelerate and compress neural networks with quantizati
 - Convert to quantized integer model
 
 
+
 # Questions
+
 The following answers are based on `My_ResNet_Quantization.ipynb`, 
 
 ## Explain the dataflow of one complete convolution layer in your neural network
@@ -93,7 +107,7 @@ The first 3 layer of ResNet50:
 
 Process quantization and de-quantization requires `scale` and `zero-point`, assume we already got these values after calibration
 
-We need first quantized input data and weights in to nbit. Convolution requires multiplation and addition, the 8bit value * 8bit value may result in a bigger value that int8 cannot present. According to google's paper, they do the calculation in higher bits, then quantize the result into 8bit before sending to ReLU layer ("computations are carried out using 32-bit floating-point arithmetic"). Activation (ReLU) will set the values less than 0 to 0.
+We need first quantized input data and weights in to n bit. Convolution requires multiplication and addition, the 8bit value * 8bit value may result in a bigger value that int8 cannot present. According to google's paper, they do the calculation in higher bits, then quantize the result into 8 bit before sending to ReLU layer ("computations are carried out using 32-bit floating-point arithmetic"). Activation (ReLU) will set the values less than 0 to 0.
 
 Specifically our input image is 3 channels color images of 32x32 pixels in size, output has 64 channels. BatchNorm after Conv means we don't need bias for the Conv layer
 
@@ -104,7 +118,7 @@ Conv-BN-ReLU Quantize layer fusion, since ReLU itself does not do any mathematic
 [Quant-Conv-BN-ReLU](https://github.com/Jermmy/pytorch-quantization-demo/blob/e075b87745aa782b6961dba752b3bf06a03e5702/module.py#L288)
 [Folding BN ReLU (Chinese)](https://jermmy.github.io/2020/07/19/2020-7-19-network-quantization-4/)
 
-Also, according to that repo, if we need to perform quantize multiplation, some parameters can be pre-calculated to imporve inference speed. Check `freeze` function in that repo.
+Also, according to that repo, if we need to perform quantize multiplication, some parameters can be pre-calculated to improve inference speed. Check `freeze` function in that repo.
 
 
 ## Show one example of how you quantize one layer of weights to 8-bit
@@ -165,7 +179,10 @@ That requires Calibration for activation quantization, the reason is similar to 
 ![](./pic/activation-quantization-1.png)
 ![](./pic/activation-quantization-2.png)
 
+
+
 ### HistogramObserver
+
 The first one is from PyTorch's official repo:
 
 Steps (according to PyTorch source code):
@@ -175,16 +192,18 @@ Steps (according to PyTorch source code):
     The search for the min/max values ensures the minimization of the quantization error with respect to the floating point model.
 3. Compute the scale and zero point
 
-The 'error' is calculated based on density and norm when choosing specific bins from histogram. Check "HistogramObserver.compute_quantization_error" in Notebook.
+The 'error' is calculated based on density and norm when choosing specific bins from histogram. Check `HistogramObserver.compute_quantization_error` in Notebook.
 During the calibration, it will find the optimal start and end range to quantize
 
 ### FakeHistogramObserver
 Manually assign a percentage to avoid the searching method. Simply use `torch.kthvalue` to determine the value,works surprisingly well in low bit situations
 
 
+
 # Optional Questions
+
 ## Can you quantize the NN to 6-bit or even lower? What would be the concern? 
-Potential concerns include the number of values dramatically reduced in low bit scenario (2^6 = 64), the situations become even worse when performing multiplation. 
+Potential concerns include the number of values dramatically reduced in low bit scenario (2^6 = 64), the situations become even worse when performing multiplication. 
 
 One solution is to use high-bit value to save the calculation results. Also, weight quantization and activation quantization are not equally sensitive in low-bit scenarios, so mix-bit quantization is an option.
 
